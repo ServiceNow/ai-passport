@@ -16,6 +16,11 @@ deliberately broken variant of it fails at least one.
 about 50 lines, as a starting point. It covers the common case only; the suite tells you
 when an implementation is complete.
 
+[examples/go-caller/](examples/go-caller/) is an independent standard-library Go caller example,
+including actual HTTP response handling. It can run the caller vectors and mock-HTTP
+conformance suite through the adapter protocol; it does not issue or verify Passports,
+provide identity authentication, or make policy decisions.
+
 ## Testing an implementation
 
 | Role | Command | Cases |
