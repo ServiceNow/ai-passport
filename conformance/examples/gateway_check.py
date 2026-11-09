@@ -2,8 +2,9 @@
 #
 # Single trusted issuer, the presenter already authenticated as (authority, identifier).
 # It covers the common case only: no refetch (§10), no multi-issuer ranking (§9.2), no
-# caching (Revocation Check v1 §5.3) and no I-JSON character checks (§4). Run your real
-# implementation through conformance/run.py; that is what tells you it is complete.
+# caching (Revocation Check v1 §5.3) and no I-JSON character checks (§4). It does fail
+# closed on any status other than 200 and on redirects (Revocation Check v1 §4, §5.2).
+# Run your real implementation through conformance/run.py; that is what tells you it is complete.
 #
 # pip install requests rfc8785 cryptography      (Python 3.11 or later)
 import base64, json, requests, rfc8785
@@ -34,11 +35,15 @@ def verify(p):
                sig["protected"].encode() + b"." + body, ec.ECDSA(hashes.SHA256()))
     return p
 
+def get(uri, **params):                               # 200 only, no redirects followed
+    resp = requests.get(uri, params=params, timeout=2, allow_redirects=False)
+    need(resp.status_code == 200)
+    return json.loads(resp.text, object_pairs_hook=strict)
+
 def check(authority, identifier):
     """Business context for the agent you authenticated as (authority, identifier), or None: deny."""
     try:
-        p = verify(json.loads(requests.get(f"{ISSUER}/passports", timeout=2, params={
-            "authority": authority, "identifier": identifier}).text, object_pairs_hook=strict))
+        p = verify(get(f"{ISSUER}/passports", authority=authority, identifier=identifier))
         now = datetime.now(timezone.utc)
         need(p["schema_version"] == "1" and p["issuer"] == ISSUER)
         need(p["subject_type"] in {"agent", "harness", "tool_server", "model_endpoint"})
@@ -51,7 +56,7 @@ def check(authority, identifier):
              for b in p["bindings"]))
         uri = p["status"]["revocation_check"]["uri"].replace("{subject}", quote(p["subject"], safe=""))
         need(uri.startswith(ISSUER + "/"))
-        r = json.loads(requests.get(uri, timeout=2).text, object_pairs_hook=strict)
+        r = get(uri)
         need(r["revoked"] is False and r["revoked_scopes"] == [] and r["subject"] == p["subject"])
         need(r["min_required_revision"] <= p["revision"])
         return p["business_context"]
